@@ -1,0 +1,164 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Usuários
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(USER)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  transactions Transaction[]
+  categories   Category[]
+  accounts     Account[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  USER
+  MANAGER
+}
+
+// Modelo de Contas Bancárias
+model Account {
+  id            String   @id @default(uuid())
+  name          String
+  type          AccountType
+  balance       Decimal  @default(0) @db.Decimal(15, 2)
+  initialBalance Decimal @default(0) @db.Decimal(15, 2)
+  description   String?
+  active        Boolean  @default(true)
+  userId        String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relações
+  user                User          @relation(fields: [userId], references: [id])
+  transactionsFrom    Transaction[] @relation("AccountFrom")
+  transactionsTo      Transaction[] @relation("AccountTo")
+
+  @@map("accounts")
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  INVESTMENT
+  CASH
+  CREDIT_CARD
+}
+
+// Modelo de Categorias
+model Category {
+  id          String       @id @default(uuid())
+  name        String
+  type        CategoryType
+  color       String?
+  icon        String?
+  description String?
+  userId      String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relações
+  user         User          @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+
+  @@map("categories")
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+// Modelo de Transações
+model Transaction {
+  id          String          @id @default(uuid())
+  description String
+  amount      Decimal         @db.Decimal(15, 2)
+  type        TransactionType
+  date        DateTime
+  isPaid      Boolean         @default(false)
+  isRecurring Boolean         @default(false)
+  categoryId  String
+  accountFromId String?
+  accountToId   String?
+  userId      String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  // Relações
+  user        User      @relation(fields: [userId], references: [id])
+  category    Category  @relation(fields: [categoryId], references: [id])
+  accountFrom Account?  @relation("AccountFrom", fields: [accountFromId], references: [id])
+  accountTo   Account?  @relation("AccountTo", fields: [accountToId], references: [id])
+
+  @@map("transactions")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+// Modelo de Orçamentos
+model Budget {
+  id         String   @id @default(uuid())
+  name       String
+  amount     Decimal  @db.Decimal(15, 2)
+  spent      Decimal  @default(0) @db.Decimal(15, 2)
+  period     Period   @default(MONTHLY)
+  startDate  DateTime
+  endDate    DateTime
+  categoryId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("budgets")
+}
+
+enum Period {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+// Modelo de Metas Financeiras
+model Goal {
+  id           String     @id @default(uuid())
+  name         String
+  description  String?
+  targetAmount Decimal    @db.Decimal(15, 2)
+  currentAmount Decimal   @default(0) @db.Decimal(15, 2)
+  deadline     DateTime
+  status       GoalStatus @default(IN_PROGRESS)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("goals")
+}
+
+enum GoalStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
