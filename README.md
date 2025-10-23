@@ -1,6 +1,6 @@
 # 💰 Sistema Financeiro - SisFin
 
-Sistema de gerenciamento financeiro com Prisma ORM, suportando transações, produtos, clientes e metas financeiras.
+Sistema de gerenciamento financeiro completo com Next.js e Prisma ORM, suportando transações, produtos, clientes, MRR (Monthly Recurring Revenue) e metas financeiras.
 
 ## 📋 Entidades do Sistema
 
@@ -68,7 +68,19 @@ npm run prisma:generate
 npm run prisma:migrate
 ```
 
-### 5. Visualizar Dados (Prisma Studio)
+### 5. (Opcional) Popular com Dados de Exemplo
+```bash
+npm run prisma:seed
+```
+
+### 6. Iniciar Servidor de Desenvolvimento
+```bash
+npm run dev
+```
+
+O sistema estará disponível em `http://localhost:3000`
+
+### 7. Visualizar Dados (Prisma Studio)
 ```bash
 npm run prisma:studio
 ```
@@ -114,13 +126,43 @@ Meta
   └── CentroCusto (optional)
 ```
 
+## ✨ Funcionalidades Implementadas
+
+### 🎯 Gestão de Produtos e MRR
+- **Página de Produtos** (`/produtos`)
+  - Tabela com listagem completa de produtos
+  - Filtros por tipo (Único/MRR)
+  - Quantidade de vendas por produto
+  - Receita total gerada
+
+- **Dashboard de MRR**
+  - MRR atual com comparação mensal
+  - ARR (Annual Recurring Revenue) = MRR × 12
+  - Assinaturas ativas
+  - Evolução mensal (últimos 6 meses)
+  - Indicadores de crescimento (MoM)
+
+- **Vinculação com Vendas**
+  - Produtos podem ser vinculados a transações
+  - Atualização automática de métricas
+  - Cálculo em tempo real
+
+📖 **Documentação completa**: [PRODUTOS_MRR.md](./PRODUTOS_MRR.md)
+
 ## 📝 Scripts Disponíveis
 
+### Desenvolvimento
+- `npm run dev` - Inicia servidor de desenvolvimento Next.js
+- `npm run build` - Cria build de produção
+- `npm run start` - Inicia servidor de produção
+- `npm run lint` - Executa linter
+
+### Prisma/Database
 - `npm run prisma:generate` - Gera o Prisma Client
 - `npm run prisma:migrate` - Cria/aplica migrations
 - `npm run prisma:studio` - Abre interface visual para gerenciar dados
 - `npm run prisma:push` - Sincroniza schema sem criar migration
-- `npm run prisma:seed` - Popula banco com dados iniciais (quando implementado)
+- `npm run prisma:seed` - Popula banco com dados iniciais
 
 ## 🎯 Casos de Uso
 
@@ -153,9 +195,17 @@ Meta
 
 ## 📦 Tecnologias
 
+### Backend
 - **Prisma ORM** - v5.22.0
 - **PostgreSQL** - Banco de dados relacional
 - **Node.js** - Runtime JavaScript
+
+### Frontend
+- **Next.js 14** - Framework React com App Router
+- **React 18** - Biblioteca UI
+- **TypeScript** - Tipagem estática
+- **Tailwind CSS** - Framework CSS utility-first
+- **Radix UI** - Componentes acessíveis
 
 ## 📄 Licença
 
