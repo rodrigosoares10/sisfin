@@ -1,6 +1,6 @@
 # 💰 Sistema Financeiro - SisFin
 
-Sistema de gerenciamento financeiro com Prisma ORM, suportando transações, produtos, clientes e metas financeiras.
+Sistema completo de gerenciamento financeiro com dashboard interativo, construído com Next.js 14, TypeScript, TailwindCSS e Prisma ORM.
 
 ## 📋 Entidades do Sistema
 
@@ -40,6 +40,31 @@ Defina metas mensais de receita, despesa ou lucro.
 - Controle mensal/anual
 - Tipos: RECEITA, DESPESA, LUCRO
 
+## ✨ Funcionalidades do Dashboard
+
+### 📊 Dashboard Principal
+- **Cards KPI**: Visualização de métricas principais
+  - Total de Receitas (com indicador de variação)
+  - Total de Despesas (com indicador de variação)
+  - Lucro Líquido (com indicador de variação)
+  - MRR - Monthly Recurring Revenue (com indicador de variação)
+
+- **Gráficos Interativos** (powered by Recharts):
+  - Gráfico de Linha: Evolução mensal de receitas vs despesas
+  - Gráfico de Pizza: Despesas por centro de custo
+  - Gráfico de Barras: Receitas por produto
+  - Gráfico de Área: Fluxo de caixa acumulado
+
+- **Filtros de Data**:
+  - Hoje, Semana, Mês, Ano
+  - Período customizado (seletor de data inicial e final)
+
+### 🎨 Interface
+- **Sidebar Responsiva**: Navegação completa com menu mobile
+- **Header**: Busca global e notificações
+- **Design Moderno**: TailwindCSS com paleta de cores profissional
+- **Responsivo**: Otimizado para desktop, tablet e mobile
+
 ## 🚀 Configuração Inicial
 
 ### 1. Instalar Dependências
@@ -47,7 +72,14 @@ Defina metas mensais de receita, despesa ou lucro.
 npm install
 ```
 
-### 2. Configurar Banco de Dados
+### 2. Iniciar Servidor de Desenvolvimento
+```bash
+npm run dev
+```
+
+O aplicativo estará disponível em `http://localhost:3000`
+
+### 3. Configurar Banco de Dados (Opcional)
 Copie o arquivo `.env.example` para `.env` e configure sua connection string do PostgreSQL:
 ```bash
 cp .env.example .env
@@ -58,17 +90,17 @@ Edite o arquivo `.env`:
 DATABASE_URL="postgresql://usuario:senha@localhost:5432/sisfin"
 ```
 
-### 3. Gerar Cliente Prisma
+### 4. Gerar Cliente Prisma
 ```bash
 npm run prisma:generate
 ```
 
-### 4. Criar Banco de Dados
+### 5. Criar Banco de Dados
 ```bash
 npm run prisma:migrate
 ```
 
-### 5. Visualizar Dados (Prisma Studio)
+### 6. Visualizar Dados (Prisma Studio)
 ```bash
 npm run prisma:studio
 ```
@@ -116,11 +148,18 @@ Meta
 
 ## 📝 Scripts Disponíveis
 
+### Frontend (Next.js)
+- `npm run dev` - Inicia servidor de desenvolvimento
+- `npm run build` - Build de produção
+- `npm run start` - Inicia servidor de produção
+- `npm run lint` - Executa linter
+
+### Backend (Prisma)
 - `npm run prisma:generate` - Gera o Prisma Client
 - `npm run prisma:migrate` - Cria/aplica migrations
 - `npm run prisma:studio` - Abre interface visual para gerenciar dados
 - `npm run prisma:push` - Sincroniza schema sem criar migration
-- `npm run prisma:seed` - Popula banco com dados iniciais (quando implementado)
+- `npm run prisma:seed` - Popula banco com dados iniciais
 
 ## 🎯 Casos de Uso
 
@@ -153,6 +192,15 @@ Meta
 
 ## 📦 Tecnologias
 
+### Frontend
+- **Next.js 14** - Framework React com App Router
+- **TypeScript** - Tipagem estática
+- **TailwindCSS** - Framework CSS utilitário
+- **Recharts** - Biblioteca de gráficos React
+- **Lucide React** - Ícones modernos
+- **date-fns** - Manipulação de datas
+
+### Backend
 - **Prisma ORM** - v5.22.0
 - **PostgreSQL** - Banco de dados relacional
 - **Node.js** - Runtime JavaScript
