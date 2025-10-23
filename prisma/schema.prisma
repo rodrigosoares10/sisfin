@@ -1,0 +1,216 @@
+// Prisma Schema - Sistema Financeiro
+// Gerado para gerenciamento financeiro com suporte a transações, produtos, clientes e metas
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// ENUMS
+// ========================================
+
+enum TipoTransacao {
+  RECEITA
+  DESPESA
+}
+
+enum TipoProduto {
+  UNICO // Pagamento único
+  MRR   // Monthly Recurring Revenue
+}
+
+enum StatusPagamento {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+}
+
+enum MetodoPagamento {
+  DINHEIRO
+  PIX
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  BOLETO
+  TRANSFERENCIA
+  OUTRO
+}
+
+enum FrequenciaRecorrencia {
+  DIARIA
+  SEMANAL
+  QUINZENAL
+  MENSAL
+  BIMESTRAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+enum TipoCliente {
+  PESSOA_FISICA
+  PESSOA_JURIDICA
+}
+
+enum RoleUsuario {
+  ADMIN
+  USUARIO
+  VISUALIZADOR
+}
+
+enum TipoMeta {
+  RECEITA
+  DESPESA
+  LUCRO
+}
+
+// ========================================
+// MODELOS
+// ========================================
+
+model Usuario {
+  id        String   @id @default(cuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  role      RoleUsuario @default(USUARIO)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([ativo])
+  @@map("usuarios")
+}
+
+model CentroCusto {
+  id         String   @id @default(cuid())
+  nome       String
+  descricao  String?
+  cor        String   @default("#3B82F6") // Cor hexadecimal para UI
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relações
+  transacoes Transacao[]
+  metas      Meta[]
+
+  @@index([ativo])
+  @@index([nome])
+  @@map("centros_custo")
+}
+
+model Cliente {
+  id        String      @id @default(cuid())
+  nome      String
+  email     String?
+  telefone  String?
+  empresa   String?
+  tipo      TipoCliente @default(PESSOA_FISICA)
+  ativo     Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Relações
+  transacoes Transacao[]
+
+  @@index([email])
+  @@index([tipo])
+  @@index([ativo])
+  @@index([nome])
+  @@map("clientes")
+}
+
+model Produto {
+  id         String       @id @default(cuid())
+  nome       String
+  tipo       TipoProduto
+  valor      Decimal      @db.Decimal(10, 2)
+  descricao  String?
+  ativo      Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  // Relações
+  transacoes Transacao[]
+
+  @@index([ativo])
+  @@index([tipo])
+  @@index([nome])
+  @@map("produtos")
+}
+
+model Transacao {
+  id               String              @id @default(cuid())
+  tipo             TipoTransacao
+  valor            Decimal             @db.Decimal(10, 2)
+  descricao        String
+  data             DateTime            @default(now())
+  categoria        String?             // Categoria livre/customizável
+
+  // Recorrência
+  recorrente       Boolean             @default(false)
+  frequencia       FrequenciaRecorrencia?
+
+  // Pagamento
+  statusPagamento  StatusPagamento     @default(PENDENTE)
+  metodoPagamento  MetodoPagamento
+
+  // Anexo/Comprovante
+  anexoUrl         String?
+
+  // Relacionamentos
+  centroCustoId    String
+  centroCusto      CentroCusto         @relation(fields: [centroCustoId], references: [id], onDelete: Restrict)
+
+  clienteId        String?
+  cliente          Cliente?            @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  produtoId        String?
+  produto          Produto?            @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  // Índices para otimização de queries
+  @@index([data])
+  @@index([tipo])
+  @@index([statusPagamento])
+  @@index([centroCustoId])
+  @@index([clienteId])
+  @@index([produtoId])
+  @@index([recorrente])
+  @@index([data, tipo]) // Índice composto para filtros comuns
+  @@index([centroCustoId, data]) // Índice composto para relatórios por centro de custo
+  @@map("transacoes")
+}
+
+model Meta {
+  id            String     @id @default(cuid())
+  tipo          TipoMeta
+  valorMeta     Decimal    @db.Decimal(10, 2)
+  mes           Int        // 1-12
+  ano           Int        // Ex: 2024
+  descricao     String?
+
+  // Relacionamento opcional - meta pode ser geral ou específica de um centro de custo
+  centroCustoId String?
+  centroCusto   CentroCusto? @relation(fields: [centroCustoId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Índices para otimização
+  @@index([mes, ano])
+  @@index([tipo])
+  @@index([centroCustoId])
+  @@index([ano, mes, tipo]) // Índice composto para queries de período
+  @@unique([tipo, centroCustoId, mes, ano]) // Previne metas duplicadas
+  @@map("metas")
+}

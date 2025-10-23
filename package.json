@@ -1,0 +1,26 @@
+{
+  "name": "sisfin",
+  "version": "1.0.0",
+  "description": "Sistema Financeiro com Prisma ORM",
+  "main": "index.js",
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:push": "prisma db push",
+    "prisma:seed": "node prisma/seed.js"
+  },
+  "keywords": [
+    "financial",
+    "prisma",
+    "orm"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}
