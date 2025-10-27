@@ -59,7 +59,7 @@ enum TipoCliente {
 
 enum RoleUsuario {
   ADMIN
-  USUARIO
+  FINANCEIRO
   VISUALIZADOR
 }
 
@@ -67,6 +67,76 @@ enum TipoMeta {
   RECEITA
   DESPESA
   LUCRO
+}
+
+enum TipoNotificacao {
+  TRANSACAO_VENCENDO
+  TRANSACAO_VENCIDA
+  META_ULTRAPASSADA
+  META_ATINGIDA
+  RESUMO_SEMANAL
+  RESUMO_MENSAL
+  SISTEMA
+}
+
+enum StatusNotificacao {
+  NAO_LIDA
+  LIDA
+  ARQUIVADA
+}
+
+enum TipoAnexo {
+  NOTA_FISCAL
+  COMPROVANTE
+  CONTRATO
+  OUTRO
+}
+
+enum PermissaoTipo {
+  // Transações
+  TRANSACAO_CRIAR
+  TRANSACAO_EDITAR
+  TRANSACAO_DELETAR
+  TRANSACAO_VISUALIZAR
+
+  // Centro de Custo
+  CENTRO_CUSTO_CRIAR
+  CENTRO_CUSTO_EDITAR
+  CENTRO_CUSTO_DELETAR
+  CENTRO_CUSTO_VISUALIZAR
+
+  // Clientes
+  CLIENTE_CRIAR
+  CLIENTE_EDITAR
+  CLIENTE_DELETAR
+  CLIENTE_VISUALIZAR
+
+  // Produtos
+  PRODUTO_CRIAR
+  PRODUTO_EDITAR
+  PRODUTO_DELETAR
+  PRODUTO_VISUALIZAR
+
+  // Metas
+  META_CRIAR
+  META_EDITAR
+  META_DELETAR
+  META_VISUALIZAR
+
+  // Relatórios
+  RELATORIO_FINANCEIRO
+  RELATORIO_GERENCIAL
+  RELATORIO_EXPORTAR
+
+  // Usuários
+  USUARIO_CRIAR
+  USUARIO_EDITAR
+  USUARIO_DELETAR
+  USUARIO_VISUALIZAR
+
+  // Sistema
+  CONFIGURACOES_SISTEMA
+  AUDITORIA_VISUALIZAR
 }
 
 // ========================================
@@ -78,13 +148,20 @@ model Usuario {
   nome      String
   email     String   @unique
   senha     String
-  role      RoleUsuario @default(USUARIO)
+  role      RoleUsuario @default(FINANCEIRO)
   ativo     Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relações
+  notificacoes            Notificacao[]
+  preferenciasNotificacao PreferenciasNotificacao?
+  permissoes              UsuarioPermissao[]
+  auditLogs               AuditLog[]
+
   @@index([email])
   @@index([ativo])
+  @@index([role])
   @@map("usuarios")
 }
 
@@ -93,13 +170,15 @@ model CentroCusto {
   nome       String
   descricao  String?
   cor        String   @default("#3B82F6") // Cor hexadecimal para UI
+  orcamento  Decimal? @db.Decimal(10, 2) // Orçamento mensal (opcional)
   ativo      Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   // Relações
-  transacoes Transacao[]
-  metas      Meta[]
+  transacoes           Transacao[]
+  metas                Meta[]
+  transacoesRecorrentes TransacaoRecorrente[]
 
   @@index([ativo])
   @@index([nome])
@@ -118,7 +197,8 @@ model Cliente {
   updatedAt DateTime    @updatedAt
 
   // Relações
-  transacoes Transacao[]
+  transacoes            Transacao[]
+  transacoesRecorrentes TransacaoRecorrente[]
 
   @@index([email])
   @@index([tipo])
@@ -138,7 +218,8 @@ model Produto {
   updatedAt  DateTime     @updatedAt
 
   // Relações
-  transacoes Transacao[]
+  transacoes            Transacao[]
+  transacoesRecorrentes TransacaoRecorrente[]
 
   @@index([ativo])
   @@index([tipo])
@@ -152,17 +233,29 @@ model Transacao {
   valor            Decimal             @db.Decimal(10, 2)
   descricao        String
   data             DateTime            @default(now())
+  dataVencimento   DateTime?           // Data de vencimento (para contas a pagar/receber)
   categoria        String?             // Categoria livre/customizável
 
-  // Recorrência
+  // Multi-moeda
+  moedaId          String?
+  moeda            Moeda?              @relation(fields: [moedaId], references: [id], onDelete: SetNull)
+  valorOriginal    Decimal?            @db.Decimal(10, 2) // Valor na moeda original
+  taxaConversao    Decimal?            @db.Decimal(10, 6) // Taxa de conversão usada
+
+  // Recorrência (deprecated - usar TransacaoRecorrente)
   recorrente       Boolean             @default(false)
   frequencia       FrequenciaRecorrencia?
+
+  // Vínculo com transação recorrente (se gerada automaticamente)
+  transacaoRecorrenteId String?
+  transacaoRecorrente   TransacaoRecorrente? @relation(fields: [transacaoRecorrenteId], references: [id], onDelete: SetNull)
 
   // Pagamento
   statusPagamento  StatusPagamento     @default(PENDENTE)
   metodoPagamento  MetodoPagamento
+  dataPagamento    DateTime?           // Data efetiva do pagamento
 
-  // Anexo/Comprovante
+  // Anexo/Comprovante (deprecated - usar model Anexo)
   anexoUrl         String?
 
   // Relacionamentos
@@ -175,19 +268,26 @@ model Transacao {
   produtoId        String?
   produto          Produto?            @relation(fields: [produtoId], references: [id], onDelete: SetNull)
 
+  // Anexos
+  anexos           Anexo[]
+
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
   // Índices para otimização de queries
   @@index([data])
+  @@index([dataVencimento])
   @@index([tipo])
   @@index([statusPagamento])
   @@index([centroCustoId])
   @@index([clienteId])
   @@index([produtoId])
   @@index([recorrente])
+  @@index([moedaId])
+  @@index([transacaoRecorrenteId])
   @@index([data, tipo]) // Índice composto para filtros comuns
   @@index([centroCustoId, data]) // Índice composto para relatórios por centro de custo
+  @@index([dataVencimento, statusPagamento]) // Para alertas de vencimento
   @@map("transacoes")
 }
 
@@ -198,6 +298,7 @@ model Meta {
   mes           Int        // 1-12
   ano           Int        // Ex: 2024
   descricao     String?
+  alertaAtivo   Boolean    @default(true) // Se deve alertar ao ultrapassar
 
   // Relacionamento opcional - meta pode ser geral ou específica de um centro de custo
   centroCustoId String?
@@ -210,7 +311,265 @@ model Meta {
   @@index([mes, ano])
   @@index([tipo])
   @@index([centroCustoId])
+  @@index([alertaAtivo])
   @@index([ano, mes, tipo]) // Índice composto para queries de período
   @@unique([tipo, centroCustoId, mes, ano]) // Previne metas duplicadas
   @@map("metas")
+}
+
+// ========================================
+// TRANSAÇÕES RECORRENTES
+// ========================================
+
+model TransacaoRecorrente {
+  id              String                @id @default(cuid())
+  tipo            TipoTransacao
+  valor           Decimal               @db.Decimal(10, 2)
+  descricao       String
+  categoria       String?
+
+  // Configuração de recorrência
+  frequencia      FrequenciaRecorrencia
+  dataInicio      DateTime
+  dataFim         DateTime?             // Null = sem data fim
+  diaVencimento   Int?                  // Dia do mês (1-31) ou dia da semana (0-6)
+  ultimaGeracao   DateTime?             // Data da última transação gerada
+  proximaGeracao  DateTime              // Data da próxima transação a ser gerada
+
+  // Multi-moeda
+  moedaId         String?
+  moeda           Moeda?                @relation(fields: [moedaId], references: [id], onDelete: SetNull)
+
+  // Pagamento
+  metodoPagamento MetodoPagamento
+
+  // Relacionamentos
+  centroCustoId   String
+  centroCusto     CentroCusto           @relation(fields: [centroCustoId], references: [id], onDelete: Restrict)
+
+  clienteId       String?
+  cliente         Cliente?              @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  produtoId       String?
+  produto         Produto?              @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+
+  // Transações geradas
+  transacoesGeradas Transacao[]
+
+  ativo           Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([ativo])
+  @@index([proximaGeracao])
+  @@index([centroCustoId])
+  @@index([frequencia])
+  @@map("transacoes_recorrentes")
+}
+
+// ========================================
+// MULTI-MOEDA
+// ========================================
+
+model Moeda {
+  id              String   @id @default(cuid())
+  codigo          String   @unique // BRL, USD, EUR, etc.
+  nome            String   // Real Brasileiro, Dólar Americano, etc.
+  simbolo         String   // R$, $, €, etc.
+  casasDecimais   Int      @default(2)
+  ativo           Boolean  @default(true)
+  padrao          Boolean  @default(false) // Moeda base do sistema
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relações
+  transacoes              Transacao[]
+  transacoesRecorrentes   TransacaoRecorrente[]
+  taxasCambioOrigem       TaxaCambio[] @relation("MoedaOrigem")
+  taxasCambioDestino      TaxaCambio[] @relation("MoedaDestino")
+
+  @@index([codigo])
+  @@index([padrao])
+  @@index([ativo])
+  @@map("moedas")
+}
+
+model TaxaCambio {
+  id              String   @id @default(cuid())
+  moedaOrigemId   String
+  moedaDestinoId  String
+  taxa            Decimal  @db.Decimal(10, 6)
+  data            DateTime @default(now())
+  fonte           String?  // API externa, manual, etc.
+
+  moedaOrigem     Moeda    @relation("MoedaOrigem", fields: [moedaOrigemId], references: [id], onDelete: Cascade)
+  moedaDestino    Moeda    @relation("MoedaDestino", fields: [moedaDestinoId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+
+  @@index([moedaOrigemId, moedaDestinoId, data])
+  @@index([data])
+  @@map("taxas_cambio")
+}
+
+// ========================================
+// NOTIFICAÇÕES
+// ========================================
+
+model Notificacao {
+  id          String              @id @default(cuid())
+  usuarioId   String
+  tipo        TipoNotificacao
+  titulo      String
+  mensagem    String
+  status      StatusNotificacao   @default(NAO_LIDA)
+
+  // Dados contextuais (JSON)
+  metadata    Json?               // Informações adicionais (IDs relacionados, valores, etc.)
+
+  // Relacionamentos
+  usuario     Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime            @default(now())
+  leituraEm   DateTime?
+
+  @@index([usuarioId, status])
+  @@index([tipo])
+  @@index([createdAt])
+  @@map("notificacoes")
+}
+
+model PreferenciasNotificacao {
+  id                      String   @id @default(cuid())
+  usuarioId               String   @unique
+
+  // Email
+  emailAtivo              Boolean  @default(true)
+  emailTransacaoVencendo  Boolean  @default(true)
+  emailTransacaoVencida   Boolean  @default(true)
+  emailMetaUltrapassada   Boolean  @default(true)
+  emailResumoSemanal      Boolean  @default(false)
+  emailResumoMensal       Boolean  @default(true)
+
+  // In-app
+  notificacaoApp          Boolean  @default(true)
+
+  // Configurações de timing
+  diasAntesVencimento     Int      @default(3) // Quantos dias antes notificar
+  horaResumo              Int      @default(9) // Hora do dia para enviar resumos (0-23)
+
+  usuario                 Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@map("preferencias_notificacao")
+}
+
+// ========================================
+// ANEXOS
+// ========================================
+
+model Anexo {
+  id            String      @id @default(cuid())
+  transacaoId   String
+  tipo          TipoAnexo
+
+  // Arquivo
+  nomeArquivo   String
+  nomeOriginal  String
+  tamanho       Int         // Em bytes
+  mimeType      String
+  url           String      // URL do arquivo (S3, local, etc.)
+
+  // Metadados
+  descricao     String?
+
+  // Relacionamentos
+  transacao     Transacao   @relation(fields: [transacaoId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([transacaoId])
+  @@index([tipo])
+  @@map("anexos")
+}
+
+// ========================================
+// CONTROLE DE ACESSO
+// ========================================
+
+model Permissao {
+  id          String              @id @default(cuid())
+  tipo        PermissaoTipo       @unique
+  nome        String
+  descricao   String?
+  createdAt   DateTime            @default(now())
+
+  // Relações
+  permissoesRole    RolePermissao[]
+  permissoesUsuario UsuarioPermissao[]
+
+  @@map("permissoes")
+}
+
+model RolePermissao {
+  id          String        @id @default(cuid())
+  role        RoleUsuario
+  permissaoId String
+
+  permissao   Permissao     @relation(fields: [permissaoId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime      @default(now())
+
+  @@unique([role, permissaoId])
+  @@index([role])
+  @@map("roles_permissoes")
+}
+
+model UsuarioPermissao {
+  id          String    @id @default(cuid())
+  usuarioId   String
+  permissaoId String
+  concedida   Boolean   @default(true) // true = concede, false = revoga
+
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  permissao   Permissao @relation(fields: [permissaoId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+
+  @@unique([usuarioId, permissaoId])
+  @@index([usuarioId])
+  @@map("usuarios_permissoes")
+}
+
+// ========================================
+// AUDITORIA
+// ========================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  usuarioId   String?
+  acao        String   // CREATE, UPDATE, DELETE, LOGIN, etc.
+  entidade    String   // Nome da tabela/modelo
+  entidadeId  String?  // ID do registro afetado
+
+  // Dados da mudança
+  dadosAntigos Json?
+  dadosNovos   Json?
+
+  // Metadados
+  ip          String?
+  userAgent   String?
+
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+
+  @@index([usuarioId])
+  @@index([entidade, entidadeId])
+  @@index([createdAt])
+  @@index([acao])
+  @@map("audit_logs")
 }

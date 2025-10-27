@@ -1,6 +1,48 @@
-# 💰 Sistema Financeiro - SisFin
+# 💰 Sistema Financeiro Avançado - SisFin
 
-Sistema de gerenciamento financeiro com Prisma ORM, suportando transações, produtos, clientes e metas financeiras.
+Sistema completo de gestão financeira com recursos avançados: transações recorrentes, multi-moeda, notificações, anexos e controle de acesso granular.
+
+## 🎉 Versão 2.0 - Recursos Avançados
+
+Esta versão inclui recursos enterprise para um sistema financeiro robusto e completo.
+
+## ✨ Recursos Avançados
+
+### 1. 🔄 Transações Recorrentes
+- Geração automática de transações em intervalos regulares
+- Frequências: diária, semanal, mensal, anual e muito mais
+- Agendamento via cron jobs
+- Vínculo entre transação gerada e template
+
+### 2. 🔔 Sistema de Notificações
+- Alertas de contas a pagar/receber
+- Notificações quando ultrapassar meta de centro de custo
+- Resumo semanal/mensal por email
+- Notificações in-app e por email
+- Preferências configuráveis por usuário
+
+### 3. 💱 Multi-Moeda
+- Suporte para diferentes moedas (BRL, USD, EUR, etc.)
+- Conversão automática com histórico de taxas
+- Relatórios em moeda base
+- Integração com API externa de câmbio
+
+### 4. 📎 Anexos
+- Upload de notas fiscais/comprovantes
+- Armazenamento local ou cloud (S3)
+- Múltiplos anexos por transação
+- URLs assinadas para download seguro
+
+### 5. 🔐 Controle de Acesso
+- Perfis: Admin, Financeiro, Visualizador
+- Permissões granulares por funcionalidade
+- Override de permissões por usuário
+- Middleware para proteção de rotas
+
+### 6. 📋 Auditoria
+- Registro automático de todas as ações
+- Histórico de alterações (antes/depois)
+- Rastreamento de IP e User-Agent
 
 ## 📋 Entidades do Sistema
 
@@ -116,11 +158,95 @@ Meta
 
 ## 📝 Scripts Disponíveis
 
+### Prisma
 - `npm run prisma:generate` - Gera o Prisma Client
 - `npm run prisma:migrate` - Cria/aplica migrations
 - `npm run prisma:studio` - Abre interface visual para gerenciar dados
 - `npm run prisma:push` - Sincroniza schema sem criar migration
 - `npm run prisma:seed` - Popula banco com dados iniciais (quando implementado)
+
+### Sistema
+- `npm run init:system` - Inicializa permissões e moedas padrão
+- `npm run jobs:start` - Inicia agendador de tarefas (cron jobs)
+- `npm run examples` - Executa exemplos de uso dos recursos
+
+## ⏰ Tarefas Agendadas (Cron Jobs)
+
+Quando você executa `npm run jobs:start`, as seguintes tarefas são agendadas:
+
+| Tarefa | Horário | Frequência |
+|--------|---------|------------|
+| Gerar transações recorrentes | 00:05 | Diária |
+| Atualizar taxas de câmbio | 08:00 | Diária |
+| Notificar transações vencendo | 09:00 | Diária |
+| Notificar transações vencidas | 10:00 | Diária |
+| Verificar metas | 11:00 | Diária |
+| Resumo semanal | 09:00 | Segunda-feira |
+| Resumo mensal | 09:00 | Dia 1 do mês |
+
+## 💡 Guia Rápido
+
+### Criar Transação Recorrente
+
+```javascript
+const recorrenteService = require('./src/services/recorrenteService');
+
+const recorrente = await recorrenteService.criar({
+  tipo: 'DESPESA',
+  valor: 1500.00,
+  descricao: 'Aluguel do escritório',
+  frequencia: 'MENSAL',
+  dataInicio: new Date('2024-01-05'),
+  diaVencimento: 5,
+  metodoPagamento: 'BOLETO',
+  centroCustoId: 'centro-custo-id'
+});
+```
+
+### Converter Moedas
+
+```javascript
+const moedaService = require('./src/services/moedaService');
+
+const valorBRL = await moedaService.converter(100, 'USD', 'BRL');
+```
+
+### Upload de Anexo
+
+```javascript
+const anexoService = require('./src/services/anexoService');
+
+const anexo = await anexoService.upload({
+  transacaoId: 'transacao-id',
+  tipo: 'NOTA_FISCAL',
+  arquivo: fileObject,
+  descricao: 'Nota fiscal do fornecedor'
+});
+```
+
+### Verificar Permissão
+
+```javascript
+const permissaoMiddleware = require('./src/middleware/permissaoMiddleware');
+
+const temPermissao = await permissaoMiddleware.verificarPermissao(
+  'usuario-id',
+  'TRANSACAO_CRIAR'
+);
+```
+
+## 📚 Documentação Completa
+
+Para documentação detalhada de todos os recursos avançados, consulte:
+
+**[📖 Documentação Completa de Recursos Avançados](docs/RECURSOS_AVANCADOS.md)**
+
+Incluindo:
+- Guias detalhados de cada recurso
+- Exemplos de código
+- Modelos de dados
+- Configurações avançadas
+- Integrações com serviços externos (S3, APIs de câmbio, SMTP)
 
 ## 🎯 Casos de Uso
 
