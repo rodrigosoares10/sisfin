@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { MRRDashboard } from '@/components/mrr-dashboard'
+import { ProductForm } from '@/components/product-form'
 import { formatCurrency } from '@/lib/utils'
 import { ProductStats } from '@/types'
 
@@ -14,6 +15,9 @@ export default function ProdutosPage() {
   const [filteredProdutos, setFilteredProdutos] = useState<ProductStats[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'TODOS' | 'UNICO' | 'MRR'>('TODOS')
+  const [formOpen, setFormOpen] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<ProductStats | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchProdutos()
@@ -40,6 +44,44 @@ export default function ProdutosPage() {
     }
   }
 
+  const handleCreateProduct = () => {
+    setSelectedProduct(null)
+    setFormOpen(true)
+  }
+
+  const handleEditProduct = (product: ProductStats) => {
+    setSelectedProduct(product)
+    setFormOpen(true)
+  }
+
+  const handleDeleteProduct = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este produto?')) {
+      return
+    }
+
+    setDeletingId(id)
+    try {
+      const response = await fetch(`/api/produtos/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao deletar produto')
+      }
+
+      await fetchProdutos()
+    } catch (error) {
+      console.error('Erro ao deletar produto:', error)
+      alert('Erro ao deletar produto. Tente novamente.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const handleFormSuccess = () => {
+    fetchProdutos()
+  }
+
   const getTipoColor = (tipo: string) => {
     return tipo === 'MRR' ? 'success' : 'secondary'
   }
@@ -57,7 +99,17 @@ export default function ProdutosPage() {
             Gerencie seus produtos e acompanhe a receita recorrente
           </p>
         </div>
+        <Button onClick={handleCreateProduct}>
+          + Novo Produto
+        </Button>
       </div>
+
+      <ProductForm
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        product={selectedProduct}
+        onSuccess={handleFormSuccess}
+      />
 
       {/* MRR Dashboard */}
       <MRRDashboard />
@@ -116,6 +168,7 @@ export default function ProdutosPage() {
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Vendas</TableHead>
                   <TableHead className="text-right">Receita Total</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -154,6 +207,25 @@ export default function ProdutosPage() {
                             Média: {formatCurrency(produto.totalRevenue / produto.salesCount)}/mês
                           </span>
                         )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditProduct(produto)}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDeleteProduct(produto.id)}
+                          disabled={deletingId === produto.id}
+                        >
+                          {deletingId === produto.id ? 'Excluindo...' : 'Excluir'}
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

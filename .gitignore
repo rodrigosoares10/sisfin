@@ -34,3 +34,8 @@ Thumbs.db
 # Build
 dist/
 build/
+.next/
+out/
+
+# Next.js
+.vercel
