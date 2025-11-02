@@ -69,6 +69,11 @@ enum TipoMeta {
   LUCRO
 }
 
+enum Tema {
+  LIGHT
+  DARK
+}
+
 // ========================================
 // MODELOS
 // ========================================
@@ -213,4 +218,18 @@ model Meta {
   @@index([ano, mes, tipo]) // Índice composto para queries de período
   @@unique([tipo, centroCustoId, mes, ano]) // Previne metas duplicadas
   @@map("metas")
+}
+
+model Configuracao {
+  id            String   @id @default(cuid())
+  nomeAgencia   String   @default("Minha Agência")
+  logoUrl       String?  // URL do logotipo da agência
+  tema          Tema     @default(LIGHT)
+  corPrimaria   String   @default("#3B82F6") // Cor principal do tema
+  corSecundaria String   @default("#10B981") // Cor secundária
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("configuracoes")
 }

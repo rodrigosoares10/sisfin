@@ -4,15 +4,52 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { PrismaClient } = require('@prisma/client');
 
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
+// Criar pasta de uploads se não existir
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configurar multer para upload de arquivos
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'logo-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|svg/;
+    const mimetype = allowedTypes.test(file.mimetype);
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    }
+    cb(new Error('Apenas imagens são permitidas (jpeg, jpg, png, gif, svg)'));
+  }
+});
+
 // Middlewares
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(uploadsDir)); // Servir arquivos estáticos
+app.use(express.static(path.join(__dirname, '../public'))); // Servir frontend
 
 // Health check
 app.get('/health', (req, res) => {
@@ -34,7 +71,9 @@ app.get('/', (req, res) => {
       clientes: '/api/clientes',
       produtos: '/api/produtos',
       centrosCusto: '/api/centros-custo',
-      metas: '/api/metas'
+      metas: '/api/metas',
+      configuracao: '/api/configuracao',
+      uploadLogo: '/api/configuracao/upload-logo'
     }
   });
 });
@@ -236,6 +275,102 @@ app.get('/api/dashboard/resumo', async (req, res) => {
       despesas: totalDespesas,
       lucro,
       totalTransacoes
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// ROTAS - CONFIGURAÇÃO
+// ========================================
+
+// Obter configuração atual
+app.get('/api/configuracao', async (req, res) => {
+  try {
+    let config = await prisma.configuracao.findFirst();
+
+    // Se não existir configuração, criar uma padrão
+    if (!config) {
+      config = await prisma.configuracao.create({
+        data: {
+          nomeAgencia: 'Minha Agência',
+          tema: 'LIGHT',
+          corPrimaria: '#3B82F6',
+          corSecundaria: '#10B981'
+        }
+      });
+    }
+
+    res.json(config);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Atualizar configuração
+app.put('/api/configuracao', async (req, res) => {
+  try {
+    let config = await prisma.configuracao.findFirst();
+
+    if (!config) {
+      // Criar se não existir
+      config = await prisma.configuracao.create({
+        data: req.body
+      });
+    } else {
+      // Atualizar existente
+      config = await prisma.configuracao.update({
+        where: { id: config.id },
+        data: req.body
+      });
+    }
+
+    res.json(config);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Upload de logotipo
+app.post('/api/configuracao/upload-logo', upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+    }
+
+    const logoUrl = `/uploads/${req.file.filename}`;
+
+    // Atualizar configuração com novo logo
+    let config = await prisma.configuracao.findFirst();
+
+    if (!config) {
+      config = await prisma.configuracao.create({
+        data: {
+          nomeAgencia: 'Minha Agência',
+          logoUrl,
+          tema: 'LIGHT'
+        }
+      });
+    } else {
+      // Deletar logo antigo se existir
+      if (config.logoUrl) {
+        const oldLogoPath = path.join(__dirname, '..', config.logoUrl);
+        if (fs.existsSync(oldLogoPath)) {
+          fs.unlinkSync(oldLogoPath);
+        }
+      }
+
+      config = await prisma.configuracao.update({
+        where: { id: config.id },
+        data: { logoUrl }
+      });
+    }
+
+    res.json({
+      message: 'Logo atualizado com sucesso',
+      logoUrl,
+      config
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
