@@ -42,12 +42,14 @@ Defina metas mensais de receita, despesa ou lucro.
 
 ## 🚀 Configuração Inicial
 
-### 1. Instalar Dependências
+### Desenvolvimento Local
+
+#### 1. Instalar Dependências
 ```bash
 npm install
 ```
 
-### 2. Configurar Banco de Dados
+#### 2. Configurar Banco de Dados
 Copie o arquivo `.env.example` para `.env` e configure sua connection string do PostgreSQL:
 ```bash
 cp .env.example .env
@@ -56,22 +58,54 @@ cp .env.example .env
 Edite o arquivo `.env`:
 ```env
 DATABASE_URL="postgresql://usuario:senha@localhost:5432/sisfin"
+PORT=3000
 ```
 
-### 3. Gerar Cliente Prisma
+#### 3. Gerar Cliente Prisma
 ```bash
 npm run prisma:generate
 ```
 
-### 4. Criar Banco de Dados
+#### 4. Criar Banco de Dados
 ```bash
 npm run prisma:migrate
 ```
 
-### 5. Visualizar Dados (Prisma Studio)
+#### 5. Iniciar Servidor
+```bash
+npm start          # Produção
+npm run dev        # Desenvolvimento (com hot reload)
+```
+
+#### 6. Visualizar Dados (Prisma Studio)
 ```bash
 npm run prisma:studio
 ```
+
+### 🌐 Deploy no EasyPanel
+
+#### Passo 1: Criar Banco PostgreSQL
+1. No EasyPanel, crie um novo serviço **PostgreSQL**
+2. Anote a connection string fornecida
+
+#### Passo 2: Criar Aplicação
+1. Crie um novo **App** no EasyPanel
+2. Conecte ao seu repositório GitHub
+3. Configure as variáveis de ambiente:
+   ```
+   DATABASE_URL=postgresql://user:password@postgres:5432/sisfin
+   PORT=3000
+   ```
+
+#### Passo 3: Configurar Deploy
+- **Build Command**: `npm install && npm run build`
+- **Start Command**: `npm start`
+- **Port**: `3000`
+
+O EasyPanel detectará automaticamente o `Dockerfile` e fará o build da aplicação.
+
+#### Passo 4: Deploy
+Faça push para o repositório e o EasyPanel fará o deploy automaticamente!
 
 ## 📊 Índices e Otimizações
 
@@ -114,10 +148,71 @@ Meta
   └── CentroCusto (optional)
 ```
 
+## 🔌 API REST
+
+A aplicação expõe uma API REST completa para gerenciar o sistema financeiro.
+
+### Endpoints Disponíveis
+
+#### Informações Gerais
+- `GET /` - Informações da API
+- `GET /health` - Health check
+
+#### Transações
+- `GET /api/transacoes` - Listar todas as transações
+- `POST /api/transacoes` - Criar nova transação
+
+#### Clientes
+- `GET /api/clientes` - Listar clientes ativos
+- `POST /api/clientes` - Criar novo cliente
+
+#### Produtos
+- `GET /api/produtos` - Listar produtos ativos
+- `POST /api/produtos` - Criar novo produto
+
+#### Centros de Custo
+- `GET /api/centros-custo` - Listar centros de custo ativos
+- `POST /api/centros-custo` - Criar novo centro de custo
+
+#### Metas
+- `GET /api/metas` - Listar metas
+- `POST /api/metas` - Criar nova meta
+
+#### Dashboard
+- `GET /api/dashboard/resumo?mes=1&ano=2024` - Resumo financeiro
+
+### Exemplo de Uso
+
+```bash
+# Health check
+curl http://localhost:3000/health
+
+# Criar centro de custo
+curl -X POST http://localhost:3000/api/centros-custo \
+  -H "Content-Type: application/json" \
+  -d '{"nome": "Marketing", "descricao": "Despesas de marketing"}'
+
+# Criar transação
+curl -X POST http://localhost:3000/api/transacoes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tipo": "RECEITA",
+    "valor": 1000.50,
+    "descricao": "Venda de produto",
+    "centroCustoId": "centro-id",
+    "statusPagamento": "PAGO",
+    "metodoPagamento": "PIX"
+  }'
+```
+
 ## 📝 Scripts Disponíveis
 
+- `npm start` - Inicia servidor em produção
+- `npm run dev` - Inicia servidor em modo desenvolvimento
+- `npm run build` - Gera o Prisma Client
 - `npm run prisma:generate` - Gera o Prisma Client
-- `npm run prisma:migrate` - Cria/aplica migrations
+- `npm run prisma:migrate` - Cria/aplica migrations (dev)
+- `npm run prisma:migrate:deploy` - Aplica migrations (produção)
 - `npm run prisma:studio` - Abre interface visual para gerenciar dados
 - `npm run prisma:push` - Sincroniza schema sem criar migration
 - `npm run prisma:seed` - Popula banco com dados iniciais (quando implementado)
@@ -153,9 +248,12 @@ Meta
 
 ## 📦 Tecnologias
 
-- **Prisma ORM** - v5.22.0
-- **PostgreSQL** - Banco de dados relacional
 - **Node.js** - Runtime JavaScript
+- **Express.js** - Framework web para API REST
+- **Prisma ORM** - v5.22.0 - ORM moderno para Node.js
+- **PostgreSQL** - Banco de dados relacional
+- **Docker** - Containerização para deploy
+- **EasyPanel** - Plataforma de deploy recomendada
 
 ## 📄 Licença
 

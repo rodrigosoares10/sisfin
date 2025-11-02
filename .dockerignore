@@ -1,0 +1,46 @@
+# Dependências
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Build
+dist
+build
+.next
+out
+
+# Testes
+coverage
+.nyc_output
+
+# Temporários
+tmp
+temp
+
+# README e documentação (opcional - comente se quiser incluir)
+README.md
