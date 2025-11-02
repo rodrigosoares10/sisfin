@@ -67,7 +67,7 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'Sistema Financeiro API',
-    version: '1.0.0',
+    version: '2.0.0',
     endpoints: {
       health: '/health',
       auth: {
@@ -82,7 +82,16 @@ app.get('/', (req, res) => {
       metas: '/api/metas',
       configuracao: '/api/configuracao',
       uploadLogo: '/api/configuracao/upload-logo',
-      usuarios: '/api/usuarios'
+      usuarios: '/api/usuarios',
+      dashboard: {
+        resumo: '/api/dashboard/resumo?mes=1&ano=2024',
+        mrr: '/api/dashboard/mrr?mes=1&ano=2024',
+        porCliente: '/api/dashboard/por-cliente?mes=1&ano=2024&limit=10',
+        porCentroCusto: '/api/dashboard/por-centro-custo?mes=1&ano=2024',
+        evolucao: '/api/dashboard/evolucao?meses=6',
+        topClientes: '/api/dashboard/top-clientes?limit=10',
+        statusPagamento: '/api/dashboard/status-pagamento?mes=1&ano=2024'
+      }
     }
   });
 });
@@ -443,6 +452,333 @@ app.get('/api/dashboard/resumo', async (req, res) => {
       lucro,
       totalTransacoes
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Dashboard MRR (Receita Recorrente Mensal)
+app.get('/api/dashboard/mrr', async (req, res) => {
+  try {
+    const { mes, ano } = req.query;
+    const now = new Date();
+    const targetMes = mes ? parseInt(mes) : now.getMonth() + 1;
+    const targetAno = ano ? parseInt(ano) : now.getFullYear();
+
+    const startDate = new Date(targetAno, targetMes - 1, 1);
+    const endDate = new Date(targetAno, targetMes, 0, 23, 59, 59);
+
+    // MRR de produtos tipo MRR
+    const mrrProdutos = await prisma.transacao.aggregate({
+      where: {
+        tipo: 'RECEITA',
+        statusPagamento: 'PAGO',
+        data: { gte: startDate, lte: endDate },
+        produto: { tipo: 'MRR' }
+      },
+      _sum: { valor: true }
+    });
+
+    // MRR de transações recorrentes mensais
+    const mrrRecorrente = await prisma.transacao.aggregate({
+      where: {
+        tipo: 'RECEITA',
+        statusPagamento: 'PAGO',
+        data: { gte: startDate, lte: endDate },
+        recorrente: true,
+        frequencia: 'MENSAL'
+      },
+      _sum: { valor: true }
+    });
+
+    // Clientes ativos com MRR
+    const clientesMRR = await prisma.transacao.groupBy({
+      by: ['clienteId'],
+      where: {
+        tipo: 'RECEITA',
+        statusPagamento: 'PAGO',
+        data: { gte: startDate, lte: endDate },
+        OR: [
+          { produto: { tipo: 'MRR' } },
+          { recorrente: true, frequencia: 'MENSAL' }
+        ]
+      },
+      _count: true
+    });
+
+    const totalMRR = (mrrProdutos._sum.valor || 0) + (mrrRecorrente._sum.valor || 0);
+
+    res.json({
+      periodo: `${targetMes}/${targetAno}`,
+      totalMRR,
+      mrrProdutos: mrrProdutos._sum.valor || 0,
+      mrrRecorrente: mrrRecorrente._sum.valor || 0,
+      clientesAtivos: clientesMRR.length,
+      ticketMedio: clientesMRR.length > 0 ? totalMRR / clientesMRR.length : 0
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Dashboard por Cliente
+app.get('/api/dashboard/por-cliente', async (req, res) => {
+  try {
+    const { mes, ano, limit } = req.query;
+
+    const where = {};
+    if (mes && ano) {
+      const startDate = new Date(ano, mes - 1, 1);
+      const endDate = new Date(ano, mes, 0, 23, 59, 59);
+      where.data = { gte: startDate, lte: endDate };
+    }
+
+    // Receita por cliente
+    const receitaPorCliente = await prisma.transacao.groupBy({
+      by: ['clienteId'],
+      where: {
+        ...where,
+        tipo: 'RECEITA',
+        statusPagamento: 'PAGO',
+        clienteId: { not: null }
+      },
+      _sum: { valor: true },
+      _count: true,
+      orderBy: { _sum: { valor: 'desc' } },
+      take: limit ? parseInt(limit) : undefined
+    });
+
+    // Buscar dados dos clientes
+    const clientesComDados = await Promise.all(
+      receitaPorCliente.map(async (item) => {
+        const cliente = await prisma.cliente.findUnique({
+          where: { id: item.clienteId },
+          select: { id: true, nome: true, email: true, tipo: true }
+        });
+
+        return {
+          cliente,
+          receita: item._sum.valor || 0,
+          totalTransacoes: item._count
+        };
+      })
+    );
+
+    res.json({
+      periodo: mes && ano ? `${mes}/${ano}` : 'Todos',
+      clientes: clientesComDados
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Dashboard por Centro de Custo
+app.get('/api/dashboard/por-centro-custo', async (req, res) => {
+  try {
+    const { mes, ano } = req.query;
+
+    const where = {};
+    if (mes && ano) {
+      const startDate = new Date(ano, mes - 1, 1);
+      const endDate = new Date(ano, mes, 0, 23, 59, 59);
+      where.data = { gte: startDate, lte: endDate };
+    }
+
+    const centros = await prisma.centroCusto.findMany({
+      where: { ativo: true },
+      include: {
+        transacoes: {
+          where: {
+            ...where,
+            statusPagamento: 'PAGO'
+          }
+        }
+      }
+    });
+
+    const resultado = centros.map(centro => {
+      const receitas = centro.transacoes
+        .filter(t => t.tipo === 'RECEITA')
+        .reduce((sum, t) => sum + parseFloat(t.valor), 0);
+
+      const despesas = centro.transacoes
+        .filter(t => t.tipo === 'DESPESA')
+        .reduce((sum, t) => sum + parseFloat(t.valor), 0);
+
+      return {
+        centroCusto: {
+          id: centro.id,
+          nome: centro.nome,
+          cor: centro.cor
+        },
+        receitas,
+        despesas,
+        lucro: receitas - despesas,
+        totalTransacoes: centro.transacoes.length
+      };
+    });
+
+    res.json({
+      periodo: mes && ano ? `${mes}/${ano}` : 'Todos',
+      centrosCusto: resultado
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Dashboard Temporal (Evolução)
+app.get('/api/dashboard/evolucao', async (req, res) => {
+  try {
+    const { meses = 6 } = req.query; // Últimos 6 meses por padrão
+    const now = new Date();
+    const resultado = [];
+
+    for (let i = parseInt(meses) - 1; i >= 0; i--) {
+      const mes = now.getMonth() - i;
+      const ano = now.getFullYear();
+      const data = new Date(ano, mes, 1);
+
+      const mesAtual = data.getMonth() + 1;
+      const anoAtual = data.getFullYear();
+
+      const startDate = new Date(anoAtual, mesAtual - 1, 1);
+      const endDate = new Date(anoAtual, mesAtual, 0, 23, 59, 59);
+
+      const [receitas, despesas] = await Promise.all([
+        prisma.transacao.aggregate({
+          where: {
+            tipo: 'RECEITA',
+            statusPagamento: 'PAGO',
+            data: { gte: startDate, lte: endDate }
+          },
+          _sum: { valor: true }
+        }),
+        prisma.transacao.aggregate({
+          where: {
+            tipo: 'DESPESA',
+            statusPagamento: 'PAGO',
+            data: { gte: startDate, lte: endDate }
+          },
+          _sum: { valor: true }
+        })
+      ]);
+
+      const totalReceitas = receitas._sum.valor || 0;
+      const totalDespesas = despesas._sum.valor || 0;
+
+      resultado.push({
+        mes: mesAtual,
+        ano: anoAtual,
+        periodo: `${mesAtual}/${anoAtual}`,
+        receitas: totalReceitas,
+        despesas: totalDespesas,
+        lucro: totalReceitas - totalDespesas
+      });
+    }
+
+    res.json({ evolucao: resultado });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Top Clientes
+app.get('/api/dashboard/top-clientes', async (req, res) => {
+  try {
+    const { limit = 10, mes, ano } = req.query;
+
+    const where = { tipo: 'RECEITA', statusPagamento: 'PAGO', clienteId: { not: null } };
+    if (mes && ano) {
+      const startDate = new Date(ano, mes - 1, 1);
+      const endDate = new Date(ano, mes, 0, 23, 59, 59);
+      where.data = { gte: startDate, lte: endDate };
+    }
+
+    const topClientes = await prisma.transacao.groupBy({
+      by: ['clienteId'],
+      where,
+      _sum: { valor: true },
+      _count: true,
+      orderBy: { _sum: { valor: 'desc' } },
+      take: parseInt(limit)
+    });
+
+    const clientesComDados = await Promise.all(
+      topClientes.map(async (item) => {
+        const cliente = await prisma.cliente.findUnique({
+          where: { id: item.clienteId }
+        });
+
+        return {
+          cliente: {
+            id: cliente.id,
+            nome: cliente.nome,
+            email: cliente.email,
+            tipo: cliente.tipo
+          },
+          receita: item._sum.valor || 0,
+          transacoes: item._count
+        };
+      })
+    );
+
+    res.json({
+      periodo: mes && ano ? `${mes}/${ano}` : 'Todos',
+      topClientes: clientesComDados
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Status de Pagamento
+app.get('/api/dashboard/status-pagamento', async (req, res) => {
+  try {
+    const { mes, ano } = req.query;
+
+    const where = {};
+    if (mes && ano) {
+      const startDate = new Date(ano, mes - 1, 1);
+      const endDate = new Date(ano, mes, 0, 23, 59, 59);
+      where.data = { gte: startDate, lte: endDate };
+    }
+
+    const statusGroup = await prisma.transacao.groupBy({
+      by: ['statusPagamento', 'tipo'],
+      where,
+      _sum: { valor: true },
+      _count: true
+    });
+
+    const resultado = {
+      periodo: mes && ano ? `${mes}/${ano}` : 'Todos',
+      porStatus: {}
+    };
+
+    statusGroup.forEach(item => {
+      if (!resultado.porStatus[item.statusPagamento]) {
+        resultado.porStatus[item.statusPagamento] = {
+          total: 0,
+          receitas: 0,
+          despesas: 0,
+          transacoes: 0
+        };
+      }
+
+      const valor = item._sum.valor || 0;
+      resultado.porStatus[item.statusPagamento].total += valor;
+      resultado.porStatus[item.statusPagamento].transacoes += item._count;
+
+      if (item.tipo === 'RECEITA') {
+        resultado.porStatus[item.statusPagamento].receitas += valor;
+      } else {
+        resultado.porStatus[item.statusPagamento].despesas += valor;
+      }
+    });
+
+    res.json(resultado);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
