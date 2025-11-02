@@ -353,11 +353,13 @@
                 <h1 class="agency-name" id="agencyName">Sistema Financeiro</h1>
             </div>
             <div class="header-actions">
+                <span id="userName" style="color: var(--text-secondary); margin-right: 10px;"></span>
                 <button class="theme-toggle" id="themeToggle">
                     <span id="themeIcon">🌙</span>
                     <span id="themeText">Dark</span>
                 </button>
                 <button class="btn" id="settingsBtn">⚙️ Configurações</button>
+                <button class="btn" id="logoutBtn" style="background: #ef4444;">🚪 Sair</button>
             </div>
         </div>
     </header>
@@ -472,6 +474,27 @@
     <script>
         // Configuração da API
         const API_URL = window.location.origin;
+
+        // Verificar autenticação
+        const token = localStorage.getItem('token');
+        const usuario = JSON.parse(localStorage.getItem('usuario') || 'null');
+
+        if (!token || !usuario) {
+            // Não está logado, redirecionar para login
+            window.location.href = '/login.html';
+        }
+
+        // Exibir nome do usuário
+        document.getElementById('userName').textContent = `Olá, ${usuario.nome}`;
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            if (confirm('Deseja realmente sair?')) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('usuario');
+                window.location.href = '/login.html';
+            }
+        });
 
         // Estado da aplicação
         let currentConfig = null;

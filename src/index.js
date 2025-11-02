@@ -7,7 +7,10 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
+const { authenticateToken, requireAdmin, optionalAuth, JWT_SECRET } = require('./middleware/auth');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -67,15 +70,179 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       health: '/health',
+      auth: {
+        register: '/api/auth/register',
+        login: '/api/auth/login',
+        me: '/api/auth/me'
+      },
       transacoes: '/api/transacoes',
       clientes: '/api/clientes',
       produtos: '/api/produtos',
       centrosCusto: '/api/centros-custo',
       metas: '/api/metas',
       configuracao: '/api/configuracao',
-      uploadLogo: '/api/configuracao/upload-logo'
+      uploadLogo: '/api/configuracao/upload-logo',
+      usuarios: '/api/usuarios'
     }
   });
+});
+
+// ========================================
+// ROTAS - AUTENTICAÇÃO
+// ========================================
+
+// Registrar novo usuário
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { nome, email, senha, role } = req.body;
+
+    // Validações
+    if (!nome || !email || !senha) {
+      return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
+    }
+
+    // Verificar se email já existe
+    const usuarioExiste = await prisma.usuario.findUnique({
+      where: { email }
+    });
+
+    if (usuarioExiste) {
+      return res.status(400).json({ error: 'Email já cadastrado' });
+    }
+
+    // Hash da senha
+    const senhaHash = await bcrypt.hash(senha, 10);
+
+    // Criar usuário
+    const usuario = await prisma.usuario.create({
+      data: {
+        nome,
+        email,
+        senha: senhaHash,
+        role: role || 'USUARIO'
+      },
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        role: true,
+        ativo: true,
+        createdAt: true
+      }
+    });
+
+    res.status(201).json({
+      message: 'Usuário criado com sucesso',
+      usuario
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+
+    // Validações
+    if (!email || !senha) {
+      return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+    }
+
+    // Buscar usuário
+    const usuario = await prisma.usuario.findUnique({
+      where: { email }
+    });
+
+    if (!usuario) {
+      return res.status(401).json({ error: 'Email ou senha incorretos' });
+    }
+
+    // Verificar se usuário está ativo
+    if (!usuario.ativo) {
+      return res.status(401).json({ error: 'Usuário inativo' });
+    }
+
+    // Verificar senha
+    const senhaValida = await bcrypt.compare(senha, usuario.senha);
+
+    if (!senhaValida) {
+      return res.status(401).json({ error: 'Email ou senha incorretos' });
+    }
+
+    // Gerar token JWT
+    const token = jwt.sign(
+      {
+        id: usuario.id,
+        email: usuario.email,
+        nome: usuario.nome,
+        role: usuario.role
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' } // Token válido por 7 dias
+    );
+
+    res.json({
+      message: 'Login realizado com sucesso',
+      token,
+      usuario: {
+        id: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email,
+        role: usuario.role
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Ver usuário logado
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        role: true,
+        ativo: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    if (!usuario) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    res.json(usuario);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Listar usuários (apenas ADMIN)
+app.get('/api/usuarios', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const usuarios = await prisma.usuario.findMany({
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        role: true,
+        ativo: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(usuarios);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ========================================
