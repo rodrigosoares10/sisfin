@@ -74,6 +74,62 @@ enum Tema {
   DARK
 }
 
+enum CanalMarketing {
+  ORGANICO
+  GOOGLE_ADS
+  META_ADS
+  LINKEDIN_ADS
+  EMAIL
+  INDICACAO
+  PARCERIA
+  OUTRO
+}
+
+enum TipoCusto {
+  COGS      // Cost of Goods Sold
+  OPEX      // Operational Expense
+  CAC       // Customer Acquisition Cost
+}
+
+enum HealthScore {
+  EXCELENTE  // 80-100
+  BOM        // 60-79
+  MEDIO      // 40-59
+  RISCO      // 20-39
+  CRITICO    // 0-19
+}
+
+enum TipoMRRMovement {
+  NOVO         // Novo cliente
+  EXPANSION    // Upgrade/expansion
+  CONTRACTION  // Downgrade
+  CHURN        // Cancelamento
+  REATIVACAO   // Reativação de churned
+}
+
+enum StatusProjeto {
+  PLANEJAMENTO
+  EM_ANDAMENTO
+  REVISAO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum PrioridadeTicket {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum StatusTicket {
+  ABERTO
+  EM_ATENDIMENTO
+  AGUARDANDO_CLIENTE
+  RESOLVIDO
+  FECHADO
+}
+
 // ========================================
 // MODELOS
 // ========================================
@@ -103,8 +159,9 @@ model CentroCusto {
   updatedAt  DateTime @updatedAt
 
   // Relações
-  transacoes Transacao[]
-  metas      Meta[]
+  transacoes       Transacao[]
+  metas            Meta[]
+  operationalCosts OperationalCost[]
 
   @@index([ativo])
   @@index([nome])
@@ -123,7 +180,11 @@ model Cliente {
   updatedAt DateTime    @updatedAt
 
   // Relações
-  transacoes Transacao[]
+  transacoes      Transacao[]
+  health          CustomerHealth?
+  mrrMovements    MRRMovement[]
+  agencyProjects  AgencyProject[]
+  supportTickets  SupportTicket[]
 
   @@index([email])
   @@index([tipo])
@@ -143,7 +204,8 @@ model Produto {
   updatedAt  DateTime     @updatedAt
 
   // Relações
-  transacoes Transacao[]
+  transacoes   Transacao[]
+  mrrMovements MRRMovement[]
 
   @@index([ativo])
   @@index([tipo])
@@ -232,4 +294,222 @@ model Configuracao {
   updatedAt     DateTime @updatedAt
 
   @@map("configuracoes")
+}
+
+// ========================================
+// MÉTRICAS E ANALYTICS
+// ========================================
+
+// Custos de Marketing (CAC)
+model MarketingCost {
+  id          String          @id @default(cuid())
+  canal       CanalMarketing
+  campanha    String
+  valor       Decimal         @db.Decimal(10, 2)
+  data        DateTime        @default(now())
+  descricao   String?
+
+  // Métricas adicionais
+  leads       Int?            // Leads gerados
+  conversoes  Int?            // Conversões (clientes)
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([canal])
+  @@index([data])
+  @@index([data, canal])
+  @@map("marketing_costs")
+}
+
+// Custos Operacionais (COGS, OPEX)
+model OperationalCost {
+  id            String     @id @default(cuid())
+  tipo          TipoCusto
+  categoria     String     // Ex: Cloud, Salários, Licenças, APIs
+  descricao     String
+  valor         Decimal    @db.Decimal(10, 2)
+  data          DateTime   @default(now())
+
+  // Relacionamento opcional com centro de custo
+  centroCustoId String?
+  centroCusto   CentroCusto? @relation(fields: [centroCustoId], references: [id], onDelete: SetNull)
+
+  // Métricas adicionais
+  usuariosAtivos Int?       // Para calcular custo por usuário
+  transacoes     Int?       // Para calcular custo por transação
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([tipo])
+  @@index([data])
+  @@index([centroCustoId])
+  @@index([data, tipo])
+  @@map("operational_costs")
+}
+
+// Health Score de Clientes
+model CustomerHealth {
+  id            String      @id @default(cuid())
+  clienteId     String      @unique
+  cliente       Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  healthScore   HealthScore @default(MEDIO)
+  scoreNumerico Int         @default(50) // 0-100
+
+  // Fatores de health score
+  usoProduto    Int?        // Score de uso (0-100)
+  nps           Int?        // Net Promoter Score (-100 a 100)
+  ticketsAbertos Int         @default(0)
+  diasSemUso    Int         @default(0)
+  riscoPagamento Boolean    @default(false)
+
+  // Notas e observações
+  observacoes   String?
+  ultimaRevisao DateTime    @default(now())
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([healthScore])
+  @@index([scoreNumerico])
+  @@index([riscoPagamento])
+  @@map("customer_health")
+}
+
+// Movimentos de MRR (para NRR/GRR)
+model MRRMovement {
+  id          String           @id @default(cuid())
+  tipo        TipoMRRMovement
+  clienteId   String
+  cliente     Cliente          @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  valor       Decimal          @db.Decimal(10, 2)
+  data        DateTime         @default(now())
+  mes         Int              // 1-12
+  ano         Int
+
+  // Detalhes do movimento
+  produtoId   String?
+  produto     Produto?         @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+
+  mrrAnterior Decimal?         @db.Decimal(10, 2)
+  mrrNovo     Decimal?         @db.Decimal(10, 2)
+
+  motivo      String?          // Motivo do churn/downgrade
+  observacoes String?
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([tipo])
+  @@index([data])
+  @@index([clienteId])
+  @@index([mes, ano])
+  @@index([mes, ano, tipo])
+  @@map("mrr_movements")
+}
+
+// Projetos de Agência
+model AgencyProject {
+  id              String        @id @default(cuid())
+  nome            String
+  clienteId       String?
+  cliente         Cliente?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  status          StatusProjeto @default(PLANEJAMENTO)
+
+  // Datas
+  dataInicio      DateTime      @default(now())
+  dataPrevisao    DateTime?
+  dataConclusao   DateTime?
+
+  // Financeiro
+  valorContratado Decimal       @db.Decimal(10, 2)
+  valorFaturado   Decimal       @default(0) @db.Decimal(10, 2)
+
+  // Horas
+  horasEstimadas  Decimal       @db.Decimal(10, 2)
+  horasRealizadas Decimal       @default(0) @db.Decimal(10, 2)
+  horasFaturaveis Decimal       @default(0) @db.Decimal(10, 2)
+
+  // Métricas
+  custoReal       Decimal       @default(0) @db.Decimal(10, 2)
+  margemBruta     Decimal?      @db.Decimal(10, 2) // Calculada
+
+  descricao       String?
+  observacoes     String?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status])
+  @@index([clienteId])
+  @@index([dataInicio])
+  @@map("agency_projects")
+}
+
+// Tickets de Suporte
+model SupportTicket {
+  id            String           @id @default(cuid())
+  clienteId     String
+  cliente       Cliente          @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  titulo        String
+  descricao     String?
+  prioridade    PrioridadeTicket @default(MEDIA)
+  status        StatusTicket     @default(ABERTO)
+
+  // SLA
+  dataAbertura  DateTime         @default(now())
+  dataResposta  DateTime?
+  dataResolucao DateTime?
+  dataFechamento DateTime?
+
+  // Métricas
+  tempoResposta Int?             // Minutos até primeira resposta
+  tempoResolucao Int?            // Minutos até resolução
+  primeiroContato Boolean        @default(true) // FCR - First Contact Resolution
+
+  // Responsável
+  responsavelId String?
+
+  observacoes   String?
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([status])
+  @@index([prioridade])
+  @@index([clienteId])
+  @@index([dataAbertura])
+  @@map("support_tickets")
+}
+
+// Saldo de Caixa (para Runway)
+model CashBalance {
+  id              String   @id @default(cuid())
+  data            DateTime @default(now())
+  mes             Int      // 1-12
+  ano             Int
+
+  saldoInicial    Decimal  @db.Decimal(10, 2)
+  entradas        Decimal  @default(0) @db.Decimal(10, 2)
+  saidas          Decimal  @default(0) @db.Decimal(10, 2)
+  saldoFinal      Decimal  @db.Decimal(10, 2)
+
+  // Métricas
+  burnRate        Decimal? @db.Decimal(10, 2) // Queima mensal
+  runwayMeses     Int?     // Meses de runway calculado
+
+  observacoes     String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([mes, ano])
+  @@index([mes, ano])
+  @@index([data])
+  @@map("cash_balances")
 }
